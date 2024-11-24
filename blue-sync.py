@@ -8,10 +8,10 @@ def format_mac_address(mac):
 
 def parse_registry_key_to_dict(key, result):
     for subkey in key.iter_subkeys():
-        for x in subkey.iter_subkeys():
-            ltk_value = next((value.value for value in x.iter_values() if value.name == "LTK"), None)
+        for subsubkey in subkey.iter_subkeys():
+            ltk_value = next((value.value for value in subsubkey.iter_values() if value.name == "LTK"), None)
             if ltk_value is not None:
-                formatted_mac = format_mac_address(x.name)
+                formatted_mac = format_mac_address(subsubkey.name)
                 result[formatted_mac] = ltk_value
 
 def parse_registry(reg_path):
@@ -77,6 +77,9 @@ def process_device(device_path, ltk_map):
             print(f"Device Name not found in {info_file}")
             continue
 
+        print(f"Processing device: {device}")
+        print(f"  Device Name: {name}")
+
         for mac, ltk in ltk_map.items():
             if device[:8] == mac[:8]:
                 updated_content = re.sub(r'^Key=.*$', f'Key={ltk}', content, flags=re.MULTILINE)
@@ -84,13 +87,9 @@ def process_device(device_path, ltk_map):
 
                 new_device_name = mac
                 new_device_path = os.path.join(device_path, new_device_name)
-                if device == new_device_name:
-                    print(f"Directory {device} already has the correct name, no need to rename.")
-                elif os.path.exists(new_device_path):
-                    print(f"Directory {new_device_path} already exists, skipping rename.")
-                else:
+                if new_device_path != os.path.join(device_path, device):
                     subprocess.run(['sudo', 'mv', os.path.join(device_path, device), new_device_path])
-                    print(f"Renamed directory from {device} to {new_device_name}")
+                    print(f"  Renamed directory from {device} to {new_device_name}")
 
                 break
 
