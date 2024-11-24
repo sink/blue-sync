@@ -13,20 +13,16 @@ def parse_registry_key_to_dict(key, result):
             if ltk_value is not None:
                 formatted_mac = format_mac_address(x.name)
                 result[formatted_mac] = ltk_value
-            else:
-                print(f"Subkey {x.name} does not have an LTK value.")
 
 def parse_registry(reg_path):
     try:
         hive = regipy.RegistryHive(reg_path)
-        print(f"Registry file opened successfully: {reg_path}")
     except Exception as e:
         print(f"Error opening registry file: {e}")
         return {}
 
     try:
         key = hive.get_key("\\ControlSet001\\Services\\BTHPORT\\Parameters\\Keys")
-        print("BTHPORT\\Parameters\\Keys key found.")
     except regipy.exceptions.RegistryKeyNotFoundException:
         print("BTHPORT\\Parameters\\Keys key not found.")
         return {}
@@ -77,37 +73,24 @@ def process_device(device_path, ltk_map):
         name_match = re.search(r'^Name=(.*)$', content, re.MULTILINE)
         name = name_match.group(1) if name_match else ""
 
-        print(f"Processing device: {device}")
         if not name:
-            print(f"  Device Name not found in {info_file}")
-        else:
-            print(f"  Device Name: {name}")
+            print(f"Device Name not found in {info_file}")
+            continue
 
         for mac, ltk in ltk_map.items():
             if device[:8] == mac[:8]:
-                print(f"  Device Address: {device}, LTK: {ltk}")
-
-                # Replace Key= in the info file with the matched LTK
                 updated_content = re.sub(r'^Key=.*$', f'Key={ltk}', content, flags=re.MULTILINE)
+                write_file_with_sudo(info_file, updated_content)
 
-                # Write the updated content to a new file for debugging
-                updated_info_file = os.path.join(device_path, device, "info.updated")
-                write_file_with_sudo(updated_info_file, updated_content)
-
-                # Use sudo to move the updated file to the original location
-                subprocess.run(['sudo', 'mv', updated_info_file, info_file])
-
-                # Rename the directory to the full MAC address (commented out for debugging)
                 new_device_name = mac
                 new_device_path = os.path.join(device_path, new_device_name)
                 if device == new_device_name:
-                    print(f"  Directory {device} already has the correct name, no need to rename.")
+                    print(f"Directory {device} already has the correct name, no need to rename.")
                 elif os.path.exists(new_device_path):
-                    print(f"  Directory {new_device_path} already exists, skipping rename.")
+                    print(f"Directory {new_device_path} already exists, skipping rename.")
                 else:
-                    print(f"  Would rename directory from {device} to {new_device_name}")
-                    # subprocess.run(['sudo', 'mv', os.path.join(device_path, device), new_device_path])
-                    # print(f"  Renamed directory from {device} to {new_device_name}")
+                    subprocess.run(['sudo', 'mv', os.path.join(device_path, device), new_device_path])
+                    print(f"Renamed directory from {device} to {new_device_name}")
 
                 break
 
@@ -117,16 +100,10 @@ def main():
         print("No NTFS mount points found.")
         return
 
-    print("Found the following NTFS mount points:")
-    for device, mount_point in ntfs_mounts:
-        print(f"Device: {device}, Mount Point: {mount_point}")
-
     for device, mount_point in ntfs_mounts:
         reg_path = os.path.join(mount_point, "Windows", "System32", "config", "SYSTEM")
         if os.path.exists(reg_path):
-            print(f"Found SYSTEM registry file at: {reg_path}")
             content = parse_registry(reg_path)
-
             if content:
                 print("Parsed content:")
                 for mac, ltk in content.items():
@@ -143,7 +120,6 @@ def main():
         return
 
     device_path = os.path.join("/var/lib/bluetooth", device_dir)
-    print(f"Processing device directory: {device_path}")
     process_device(device_path, content)
 
 def list_ntfs_mount_points():
